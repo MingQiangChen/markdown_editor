@@ -16,6 +16,7 @@ class _SourceCodeEditorState extends ConsumerState<SourceCodeEditor> {
     final content = ref.watch(currentContentProvider);
     final controller = ref.watch(editorControllerProvider);
     final tc = controller.textController;
+    final fontSize = ref.watch(editorFontSizeProvider);
 
     // 同步外部变更到 text controller
     if (tc.text != content) {
@@ -40,7 +41,7 @@ class _SourceCodeEditorState extends ConsumerState<SourceCodeEditor> {
               ref.read(currentContentProvider.notifier).state = value,
           style: TextStyle(
             fontFamily: 'JetBrains Mono',
-            fontSize: 14,
+            fontSize: fontSize,
             height: 1.6,
             color: Theme.of(context).colorScheme.onSurface,
           ),

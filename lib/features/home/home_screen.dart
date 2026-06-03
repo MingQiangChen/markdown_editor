@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_constants.dart';
 import '../../data/models/document.dart';
 import '../../data/providers/app_providers.dart';
+import '../settings/settings_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -20,7 +21,7 @@ class HomeScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.search),
             tooltip: '搜索文件',
-            onPressed: () => _showSearch(context),
+            onPressed: () => _showSearch(context, ref),
           ),
           IconButton(
             icon: Icon(
@@ -30,16 +31,25 @@ class HomeScreen extends ConsumerWidget {
             ),
             tooltip: '切换主题',
             onPressed: () {
-              ref.read(themeModeProvider.notifier).state = themeMode ==
-                      ThemeMode.dark
+              final newMode = themeMode == ThemeMode.dark
                   ? ThemeMode.light
                   : ThemeMode.dark;
+              ref.read(themeModeProvider.notifier).state = newMode;
+              ref
+                  .read(settingsBoxProvider)
+                  .put(AppConstants.themeModeKey, newMode.index);
             },
           ),
           IconButton(
             icon: const Icon(Icons.settings),
             tooltip: '设置',
-            onPressed: () {},
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                    builder: (_) => const SettingsScreen()),
+              );
+            },
           ),
         ],
       ),
@@ -64,10 +74,12 @@ class HomeScreen extends ConsumerWidget {
               size: 64, color: surface.withValues(alpha: 0.2)),
           const SizedBox(height: 16),
           Text('还没有文档',
-              style: TextStyle(color: surface.withValues(alpha: 0.5), fontSize: 16)),
+              style: TextStyle(
+                  color: surface.withValues(alpha: 0.5), fontSize: 16)),
           const SizedBox(height: 8),
           Text('点击右下角 + 创建第一篇文档',
-              style: TextStyle(color: surface.withValues(alpha: 0.3), fontSize: 13)),
+              style: TextStyle(
+                  color: surface.withValues(alpha: 0.3), fontSize: 13)),
         ],
       ),
     );
@@ -151,8 +163,10 @@ class HomeScreen extends ConsumerWidget {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.delete_outline, color: Colors.red),
-              title: const Text('删除', style: TextStyle(color: Colors.red)),
+              leading:
+                  const Icon(Icons.delete_outline, color: Colors.red),
+              title: const Text('删除',
+                  style: TextStyle(color: Colors.red)),
               onTap: () async {
                 Navigator.pop(ctx);
                 final box = ref.read(documentBoxProvider);
@@ -199,8 +213,12 @@ class HomeScreen extends ConsumerWidget {
     );
   }
 
-  void _showSearch(BuildContext context) {
-    showSearch(context: context, delegate: _DocumentSearch());
+  void _showSearch(BuildContext context, WidgetRef ref) {
+    final docs = ref.read(documentListProvider);
+    showSearch(
+      context: context,
+      delegate: _DocumentSearch(docs: docs, ref: ref),
+    );
   }
 
   String _formatDate(DateTime dt) {
@@ -209,14 +227,33 @@ class HomeScreen extends ConsumerWidget {
   }
 }
 
-/// 文档搜索代理
+/// 文档列表 Provider
+final documentListProvider = Provider<List<Document>>((ref) {
+  final box = ref.watch(documentBoxProvider);
+  final docs = box.values.toList()
+    ..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
+  return docs;
+});
+
+// ─── 搜索代理 ─────────────────────────────────────────────
+
 class _DocumentSearch extends SearchDelegate<String> {
+  final List<Document> docs;
+  final WidgetRef ref;
+
+  _DocumentSearch({required this.docs, required this.ref});
+
+  @override
+  String get searchFieldLabel => '搜索文档标题或内容...';
+
   @override
   List<Widget> buildActions(BuildContext context) => [
-        IconButton(
-          icon: const Icon(Icons.clear),
-          onPressed: () => query = '',
-        ),
+        if (query.isNotEmpty)
+          IconButton(
+            icon: const Icon(Icons.clear),
+            tooltip: '清除',
+            onPressed: () => query = '',
+          ),
       ];
 
   @override
@@ -226,19 +263,163 @@ class _DocumentSearch extends SearchDelegate<String> {
       );
 
   @override
-  Widget buildResults(BuildContext context) => _buildSearchResults(context);
+  Widget buildResults(BuildContext context) =>
+      _buildSearchResults(context);
 
   @override
-  Widget buildSuggestions(BuildContext context) => _buildSearchResults(context);
+  Widget buildSuggestions(BuildContext context) =>
+      _buildSearchResults(context);
 
   Widget _buildSearchResults(BuildContext context) {
-    return const Center(child: Text('搜索功能开发中'));
+    if (query.isEmpty) {
+      return _buildSearchPrompt(context);
+    }
+
+    final results = _search(query.toLowerCase());
+
+    if (results.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.search_off,
+                size: 48,
+                color: Theme.of(context)
+                    .colorScheme
+                    .onSurface
+                    .withValues(alpha: 0.3)),
+            const SizedBox(height: 12),
+            Text('未找到 "$query" 相关文档',
+                style: TextStyle(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.5))),
+          ],
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: results.length,
+      separatorBuilder: (_, __) => const Divider(height: 1, indent: 16),
+      itemBuilder: (context, index) {
+        final (doc, matchSnippet) = results[index];
+        return ListTile(
+          leading: const Icon(Icons.article_outlined),
+          title: _highlightMatch(doc.title, query, context),
+          subtitle: matchSnippet != null
+              ? Text(matchSnippet,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Theme.of(context)
+                        .colorScheme
+                        .onSurface
+                        .withValues(alpha: 0.6),
+                  ))
+              : Text(_formatSearchDate(doc.updatedAt),
+                  style: const TextStyle(fontSize: 12)),
+          onTap: () {
+            close(context, doc.id);
+            ref.read(currentDocumentIdProvider.notifier).state = doc.id;
+            ref.read(currentContentProvider.notifier).state = doc.content;
+            ref.read(currentTitleProvider.notifier).state = doc.title;
+            Navigator.pushNamed(context, '/editor');
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildSearchPrompt(BuildContext context) {
+    return Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.search, size: 48,
+              color: Theme.of(context)
+                  .colorScheme
+                  .onSurface
+                  .withValues(alpha: 0.2)),
+          const SizedBox(height: 12),
+          Text('输入关键词搜索文档',
+              style: TextStyle(
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.4))),
+          const SizedBox(height: 4),
+          Text('共 ${docs.length} 篇文档',
+              style: TextStyle(
+                  fontSize: 12,
+                  color: Theme.of(context)
+                      .colorScheme
+                      .onSurface
+                      .withValues(alpha: 0.3))),
+        ],
+      ),
+    );
+  }
+
+  /// 搜索文档，返回 (文档, 匹配摘要)
+  List<(Document, String?)> _search(String q) {
+    final results = <(Document, String?)>[];
+    for (final doc in docs) {
+      // 标题精确匹配
+      if (doc.title.toLowerCase().contains(q)) {
+        results.add((doc, null));
+        continue;
+      }
+      // 内容模糊匹配 - 找到相关行作为摘要
+      final contentLower = doc.content.toLowerCase();
+      final idx = contentLower.indexOf(q);
+      if (idx != -1) {
+        // 截取匹配位置周围的内容作为摘要
+        final start = idx > 40 ? idx - 40 : 0;
+        final end = (idx + q.length + 60) < doc.content.length
+            ? idx + q.length + 60
+            : doc.content.length;
+        var snippet = doc.content.substring(start, end);
+        if (start > 0) snippet = '...$snippet';
+        if (end < doc.content.length) snippet = '$snippet...';
+        results.add((doc, snippet.trim()));
+      }
+    }
+    return results;
+  }
+
+  /// 标题高亮匹配部分
+  Widget _highlightMatch(
+      String title, String query, BuildContext context) {
+    final lower = title.toLowerCase();
+    final idx = lower.indexOf(query.toLowerCase());
+    if (idx == -1) return Text(title);
+
+    return RichText(
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      text: TextSpan(
+        style: DefaultTextStyle.of(context).style,
+        children: [
+          TextSpan(text: title.substring(0, idx)),
+          TextSpan(
+            text: title.substring(idx, idx + query.length),
+            style: TextStyle(
+              backgroundColor:
+                  Theme.of(context).colorScheme.primaryContainer,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          TextSpan(text: title.substring(idx + query.length)),
+        ],
+      ),
+    );
+  }
+
+  String _formatSearchDate(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 }
-
-/// 文档列表 Provider
-final documentListProvider = Provider<List<Document>>((ref) {
-  final box = ref.watch(documentBoxProvider);
-  final docs = box.values.toList()..sort((a, b) => b.updatedAt.compareTo(a.updatedAt));
-  return docs;
-});

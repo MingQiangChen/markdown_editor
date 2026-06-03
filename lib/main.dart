@@ -19,7 +19,20 @@ void main() async {
         documentBoxProvider.overrideWithValue(docBox),
         settingsBoxProvider.overrideWithValue(settingsBox),
       ],
-      child: const MarkdownEditorApp(),
+      child: const SettingsLoader(child: MarkdownEditorApp()),
     ),
   );
+}
+
+/// 启动时从 Hive 加载持久化设置
+class SettingsLoader extends ConsumerWidget {
+  final Widget child;
+  const SettingsLoader({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    // 在首次 build 时加载设置
+    loadSettings(ref);
+    return child;
+  }
 }

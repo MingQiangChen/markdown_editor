@@ -23,3 +23,8 @@ Thumbs.db
 # Env
 .env
 .env.local
+
+# Local state
+.claude/
+.consolidate-state.json
+*.docx

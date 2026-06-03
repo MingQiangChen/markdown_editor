@@ -16,26 +16,59 @@ final settingsBoxProvider = Provider<Box>((ref) {
 
 // ─── 编辑器状态 ───────────────────────────────────────────
 
-/// 当前编辑器模式
-final editorModeProvider = StateProvider<EditorMode>(
-  (ref) => EditorMode.split,
-);
+/// 默认编辑模式
+final editorModeProvider = StateProvider<EditorMode>((ref) => EditorMode.split);
 
 /// 是否显示预览
 final showPreviewProvider = StateProvider<bool>((ref) => true);
 
+/// 编辑器字体大小
+final editorFontSizeProvider = StateProvider<double>(
+  (ref) => AppConstants.defaultFontSize,
+);
+
+/// 自动保存 (秒，0=关闭)
+final autoSaveProvider = StateProvider<int>((ref) => 0);
+
 // ─── 主题 ─────────────────────────────────────────────────
 
-/// 主题模式 (亮色/暗色/跟随系统)
+/// 主题模式
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
 
 // ─── 当前文档 ─────────────────────────────────────────────
 
-/// 当前打开的文档 ID
 final currentDocumentIdProvider = StateProvider<String?>((ref) => null);
-
-/// 当前文档内容 (编辑器中的文本)
 final currentContentProvider = StateProvider<String>((ref) => '');
-
-/// 文档标题
 final currentTitleProvider = StateProvider<String>((ref) => '未命名文档');
+
+// ─── 设置持久化 ───────────────────────────────────────────
+
+/// 从 Hive 加载所有持久化设置
+void loadSettings(WidgetRef ref) {
+  final box = ref.read(settingsBoxProvider);
+
+  final themeModeIdx = box.get(AppConstants.themeModeKey);
+  if (themeModeIdx != null) {
+    ref.read(themeModeProvider.notifier).state = ThemeMode.values[themeModeIdx as int];
+  }
+
+  final editorModeIdx = box.get('editor_mode');
+  if (editorModeIdx != null) {
+    ref.read(editorModeProvider.notifier).state = EditorMode.values[editorModeIdx as int];
+  }
+
+  final showPreview = box.get(AppConstants.showPreviewKey);
+  if (showPreview != null) {
+    ref.read(showPreviewProvider.notifier).state = showPreview as bool;
+  }
+
+  final fontSize = box.get(AppConstants.editorFontSizeKey);
+  if (fontSize != null) {
+    ref.read(editorFontSizeProvider.notifier).state = fontSize as double;
+  }
+
+  final autoSave = box.get('auto_save');
+  if (autoSave != null) {
+    ref.read(autoSaveProvider.notifier).state = autoSave as int;
+  }
+}
