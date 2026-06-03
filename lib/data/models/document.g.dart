@@ -18,6 +18,7 @@ class DocumentAdapter extends TypeAdapter<Document> {
       updatedAt: DateTime.fromMillisecondsSinceEpoch(fields[4] as int),
       parentId: fields[5] as String?,
       tags: (fields[6] as List?)?.cast<String>() ?? [],
+      isFolder: fields[7] as bool? ?? false,
     );
   }
 
@@ -31,6 +32,7 @@ class DocumentAdapter extends TypeAdapter<Document> {
       4: obj.updatedAt.millisecondsSinceEpoch,
       5: obj.parentId,
       6: obj.tags,
+      7: obj.isFolder,
     });
   }
 }

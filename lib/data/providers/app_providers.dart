@@ -14,6 +14,11 @@ final settingsBoxProvider = Provider<Box>((ref) {
   throw UnimplementedError('Must be overridden in main()');
 });
 
+/// Box provider - 版本历史存储 (key: docId_timestamp, value: content)
+final versionBoxProvider = Provider<Box<String>>((ref) {
+  throw UnimplementedError('Must be overridden in main()');
+});
+
 // ─── 编辑器状态 ───────────────────────────────────────────
 
 /// 默认编辑模式
@@ -40,6 +45,7 @@ final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
 final currentDocumentIdProvider = StateProvider<String?>((ref) => null);
 final currentContentProvider = StateProvider<String>((ref) => '');
 final currentTitleProvider = StateProvider<String>((ref) => '未命名文档');
+final currentFilePathProvider = StateProvider<String?>((ref) => null);
 
 // ─── 设置持久化 ───────────────────────────────────────────
 

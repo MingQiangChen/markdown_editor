@@ -12,12 +12,14 @@ void main() async {
   Hive.registerAdapter(DocumentAdapter());
   final docBox = await Hive.openBox<Document>('documents');
   final settingsBox = await Hive.openBox('settings');
+  final versionBox = await Hive.openBox<String>('document_versions');
 
   runApp(
     ProviderScope(
       overrides: [
         documentBoxProvider.overrideWithValue(docBox),
         settingsBoxProvider.overrideWithValue(settingsBox),
+        versionBoxProvider.overrideWithValue(versionBox),
       ],
       child: const SettingsLoader(child: MarkdownEditorApp()),
     ),

@@ -25,6 +25,9 @@ class Document extends HiveObject {
   @HiveField(6)
   List<String> tags;
 
+  @HiveField(7)
+  bool isFolder;
+
   Document({
     required this.id,
     required this.title,
@@ -33,6 +36,7 @@ class Document extends HiveObject {
     DateTime? updatedAt,
     this.parentId,
     List<String>? tags,
+    this.isFolder = false,
   })  : createdAt = createdAt ?? DateTime.now(),
         updatedAt = updatedAt ?? DateTime.now(),
         tags = tags ?? [];

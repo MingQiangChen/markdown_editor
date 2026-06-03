@@ -1,87 +1,96 @@
-import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:re_editor/re_editor.dart';
 import '../data/providers/app_providers.dart';
 
-/// 编辑器控制器 — 通过 Riverpod 提供给 Toolbar 和 SourceCodeEditor
 final editorControllerProvider = Provider<EditorController>((ref) {
   return EditorController(ref: ref);
 });
 
 class EditorController {
   final Ref _ref;
-  late final TextEditingController textController;
+  late final CodeLineEditingController codeController;
+  late final CodeFindController findController;
 
   EditorController({required Ref ref}) : _ref = ref {
-    textController = TextEditingController(
-        text: ref.read(currentContentProvider));
+    codeController =
+        CodeLineEditingController.fromText(ref.read(currentContentProvider));
+    findController = CodeFindController(codeController);
   }
 
   void dispose() {
-    textController.dispose();
+    findController.dispose();
+    codeController.dispose();
   }
 
-  /// 在光标处插入文本
+  /// 将平铺字符索引转换为 (行索引, 行内偏移)
+  CodeLinePosition _flatIndexToPosition(int flatIndex) {
+    var offset = 0;
+    for (var i = 0; i < codeController.codeLines.length; i++) {
+      final lineLen = codeController.codeLines[i].length;
+      if (offset + lineLen > flatIndex) {
+        return CodeLinePosition(index: i, offset: flatIndex - offset);
+      }
+      offset += lineLen;
+    }
+    final last = codeController.codeLines.last;
+    return CodeLinePosition(
+        index: codeController.codeLines.length - 1, offset: last.length);
+  }
+
   void insertAtCursor(String text) {
-    final selection = textController.selection;
-    final current = textController.text;
-    final start = selection.start;
-    final end = selection.end;
-
-    final newText = '${current.substring(0, start)}$text${current.substring(end)}';
-
-    textController.text = newText;
-    textController.selection = TextSelection.collapsed(
-      offset: start + text.length,
-    );
-    _ref.read(currentContentProvider.notifier).state = newText;
+    final sel = codeController.selection;
+    final start = sel.startOffset;
+    if (!sel.isCollapsed) {
+      codeController.replaceSelection(text);
+    } else {
+      final current = codeController.text;
+      final newText =
+          '${current.substring(0, start)}$text${current.substring(start)}';
+      codeController.text = newText;
+      codeController.selection = CodeLineSelection.fromPosition(
+          position: _flatIndexToPosition(start + text.length));
+    }
+    _syncProvider();
   }
 
-  /// 包裹选中文本 (加粗、斜体等)
   void wrapSelection(String prefix, String suffix) {
-    final selection = textController.selection;
-    final current = textController.text;
-    final start = selection.start;
-    final end = selection.end;
-    final selectedText =
-        selection.isCollapsed ? '' : current.substring(start, end);
+    final sel = codeController.selection;
+    final current = codeController.text;
+    final start = sel.startOffset;
+    final end = sel.endOffset;
+    final selectedText = sel.isCollapsed ? '' : current.substring(start, end);
 
-    final newText = current.substring(0, start) +
-        '$prefix$selectedText$suffix' +
-        current.substring(end);
+    final newText =
+        '${current.substring(0, start)}$prefix$selectedText$suffix${current.substring(end)}';
 
-    textController.text = newText;
-    final newOffset = selection.isCollapsed
+    codeController.text = newText;
+    final newOffset = sel.isCollapsed
         ? start + prefix.length
         : start + prefix.length + selectedText.length + suffix.length;
-    textController.selection = TextSelection.collapsed(offset: newOffset);
-    _ref.read(currentContentProvider.notifier).state = newText;
+    codeController.selection = CodeLineSelection.fromPosition(
+        position: _flatIndexToPosition(newOffset));
+    _syncProvider();
   }
 
-  /// 在当前行首插入块级前缀 (标题、引用、列表等)
   void insertBlockPrefix(String prefix) {
-    final selection = textController.selection;
-    final current = textController.text;
-    final lineStart = _findLineStart(current, selection.start);
+    final sel = codeController.selection;
+    final current = codeController.text;
+    final lineStart = _findLineStart(current, sel.startOffset);
 
-    final newText = current.substring(0, lineStart) +
-        prefix +
-        current.substring(lineStart);
+    final newText =
+        '${current.substring(0, lineStart)}$prefix${current.substring(lineStart)}';
 
-    textController.text = newText;
-    textController.selection = TextSelection.collapsed(
-      offset: lineStart + prefix.length,
-    );
-    _ref.read(currentContentProvider.notifier).state = newText;
+    codeController.text = newText;
+    codeController.selection = CodeLineSelection.fromPosition(
+        position: _flatIndexToPosition(lineStart + prefix.length));
+    _syncProvider();
   }
 
-  /// 撤销 (占位 — 后续接入 undo stack)
-  void undo() {
-    // TODO: 实现基于 ChangeRecord 的撤销栈
-  }
+  void undo() => codeController.undo();
+  void redo() => codeController.redo();
 
-  /// 重做
-  void redo() {
-    // TODO: 实现重做
+  void _syncProvider() {
+    _ref.read(currentContentProvider.notifier).state = codeController.text;
   }
 
   int _findLineStart(String text, int position) {

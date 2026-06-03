@@ -19,6 +19,9 @@ class AppConstants {
   static const String themeModeKey = 'theme_mode';
   static const String editorFontSizeKey = 'editor_font_size';
   static const String showPreviewKey = 'show_preview';
+
+  // 响应式断点
+  static const double compactWidthBreakpoint = 600;
 }
 
 /// 编辑器模式
