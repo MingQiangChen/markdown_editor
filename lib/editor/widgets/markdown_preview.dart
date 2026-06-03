@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:flutter_math_fork/flutter_math.dart';
+import 'package:flutter_mermaid/flutter_mermaid.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:markdown/markdown.dart' as md;
 import '../../data/providers/app_providers.dart';
 
 class MarkdownPreview extends ConsumerWidget {
@@ -25,10 +28,16 @@ class MarkdownPreview extends ConsumerWidget {
                 ),
               ),
             )
-          : Markdown(
+          : InteractiveViewer(
+              minScale: 0.5,
+              maxScale: 3.0,
+              child: Markdown(
               data: content,
               selectable: true,
               padding: EdgeInsets.zero,
+              builders: {
+                'code': _CodeBlockBuilder(context),
+              },
               styleSheet: MarkdownStyleSheet.fromTheme(
                 Theme.of(context),
               ).copyWith(
@@ -58,6 +67,87 @@ class MarkdownPreview extends ConsumerWidget {
                 ),
               ),
             ),
+          ),
+    );
+  }
+}
+
+class _CodeBlockBuilder extends MarkdownElementBuilder {
+  final BuildContext context;
+
+  _CodeBlockBuilder(this.context);
+
+  @override
+  Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
+    final language = element.attributes['class'] ?? '';
+    final code = element.textContent.trim();
+    if (code.isEmpty) return null;
+
+    if (language == 'math' || language == 'latex') {
+      return _buildMathBlock(code);
+    }
+    if (language == 'mermaid') {
+      return _buildMermaidBlock(code);
+    }
+    return null;
+  }
+
+  Widget _buildMathBlock(String code) {
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    try {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Center(
+          child: Math.tex(
+            code,
+            mathStyle: MathStyle.display,
+            textStyle: TextStyle(
+              color: onSurface,
+              fontSize: 16,
+            ),
+          ),
+        ),
+      );
+    } catch (_) {
+      return _buildErrorBlock('LaTeX 渲染失败，请检查公式语法');
+    }
+  }
+
+  Widget _buildMermaidBlock(String code) {
+    try {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: MermaidDiagram(code: code),
+      );
+    } catch (_) {
+      return _buildErrorBlock('Mermaid 渲染失败，请检查图表语法');
+    }
+  }
+
+  Widget _buildErrorBlock(String message) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.red.withValues(alpha: 0.1),
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.error_outline, color: Colors.red, size: 16),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                color: Colors.red.withValues(alpha: 0.8),
+                fontSize: 13,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
