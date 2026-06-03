@@ -29,7 +29,7 @@ lib/
 │   ├── editor_controller.dart   # 文本操作控制器 (insert/wrap/undo/redo)
 │   └── widgets/
 │       ├── source_code_editor.dart  # 代码编辑区 (re_editor.CodeEditor)
-│       ├── markdown_preview.dart    # 预览区 (flutter_markdown + 数学公式)
+│       ├── markdown_preview.dart    # 预览区 (Markdown + LaTeX + Mermaid + 行内数学)
 │       ├── toolbar.dart             # 格式化工具栏
 │       └── find_replace_bar.dart    # 查找/替换栏
 │
@@ -56,7 +56,7 @@ currentContentProvider (Riverpod StateProvider<String>)
       │     └── 外部同步: if (cc.text != content) cc.text = content
       │
       ├──→ MarkdownPreview (flutter_markdown 渲染)
-      │     └── 扩展: _MathCodeBuilder (flutter_math_fork)
+      │     └── 扩展: _CodeBlockBuilder (math/mermaid), InlineMathSyntax ($...$), InteractiveViewer
       │
       ├──→ StatusBar (行数/字数统计)
       │
