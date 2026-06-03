@@ -35,8 +35,10 @@ class MarkdownPreview extends ConsumerWidget {
               data: content,
               selectable: true,
               padding: EdgeInsets.zero,
+              inlineSyntaxes: [InlineMathSyntax()],
               builders: {
                 'code': _CodeBlockBuilder(context),
+                'math-inline': _InlineMathBuilder(context),
               },
               styleSheet: MarkdownStyleSheet.fromTheme(
                 Theme.of(context),
@@ -69,6 +71,43 @@ class MarkdownPreview extends ConsumerWidget {
             ),
           ),
     );
+  }
+}
+
+class InlineMathSyntax extends md.InlineSyntax {
+  InlineMathSyntax() : super(r'\$(.+?)\$', startCharacter: 0x24);
+
+  @override
+  bool onMatch(md.InlineParser parser, Match match) {
+    final expression = match[1]!;
+    parser.addNode(md.Element('math-inline', [md.Text(expression)]));
+    return true;
+  }
+}
+
+class _InlineMathBuilder extends MarkdownElementBuilder {
+  final BuildContext context;
+
+  _InlineMathBuilder(this.context);
+
+  @override
+  Widget? visitElementAfter(md.Element element, TextStyle? preferredStyle) {
+    final expression = element.textContent.trim();
+    if (expression.isEmpty) return null;
+
+    final onSurface = Theme.of(context).colorScheme.onSurface;
+    try {
+      return Math.tex(
+        expression,
+        mathStyle: MathStyle.text,
+        textStyle: TextStyle(
+          color: onSurface,
+          fontSize: (preferredStyle?.fontSize ?? 14) * 1.05,
+        ),
+      );
+    } catch (_) {
+      return Text('\$$expression\$', style: preferredStyle);
+    }
   }
 }
 
