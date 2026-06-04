@@ -33,7 +33,7 @@ class MarkdownPreview extends ConsumerWidget {
               maxScale: 3.0,
               child: Markdown(
               data: content,
-              selectable: true,
+              selectable: false,
               padding: EdgeInsets.zero,
               inlineSyntaxes: [InlineMathSyntax()],
               builders: {

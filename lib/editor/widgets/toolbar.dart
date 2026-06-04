@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../editor_controller.dart';
+import '../../data/providers/app_providers.dart';
 
 class EditorToolbar extends ConsumerWidget {
   const EditorToolbar({super.key});

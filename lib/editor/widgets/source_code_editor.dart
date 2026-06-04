@@ -8,7 +8,6 @@ import 'package:re_highlight/styles/atom-one-dark.dart';
 import 'package:re_highlight/styles/atom-one-light.dart';
 import '../../core/constants/app_constants.dart';
 import '../../data/providers/app_providers.dart';
-import '../editor_controller.dart';
 import 'find_replace_bar.dart';
 
 class SourceCodeEditor extends ConsumerStatefulWidget {
@@ -19,34 +18,40 @@ class SourceCodeEditor extends ConsumerStatefulWidget {
 }
 
 class _SourceCodeEditorState extends ConsumerState<SourceCodeEditor> {
-  bool _syncScheduled = false;
+  final _focusNode = FocusNode(debugLabel: 'SourceCodeEditor');
 
-  void _scheduleContentSync() {
-    if (_syncScheduled) return;
-    _syncScheduled = true;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _syncScheduled = false;
-      if (!mounted) return;
-      final cc = ref.read(editorControllerProvider).codeController;
-      final content = ref.read(currentContentProvider);
-      if (cc.text != content) {
-        cc.text = content;
-      }
-    });
+  @override
+  void initState() {
+    super.initState();
+    // re_editor's autofocus (FocusScope.autofocus) properly triggers
+    // consumeKeyboardToken → opens TextInputConnection.
+  }
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final content = ref.watch(currentContentProvider);
-    final controller = ref.read(editorControllerProvider);
+    final controller = ref.watch(editorControllerProvider);
     final cc = controller.codeController;
     final fc = controller.findController;
     final fontSize = ref.watch(editorFontSizeProvider);
     final cs = Theme.of(context).colorScheme;
 
-    if (cc.text != content) {
-      _scheduleContentSync();
-    }
+    // When content changes externally (doc opened), ensure focus + input
+    ref.listen(currentContentProvider, (prev, next) {
+      if (prev != next && mounted && !_focusNode.hasFocus) {
+        // Delay to let the widget tree settle after text update
+        Future.delayed(const Duration(milliseconds: 100), () {
+          if (mounted && !_focusNode.hasFocus) {
+            _focusNode.requestFocus();
+          }
+        });
+      }
+    });
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final highlightTheme = CodeHighlightTheme(
@@ -74,12 +79,19 @@ class _SourceCodeEditorState extends ConsumerState<SourceCodeEditor> {
           }
         },
         child: CodeEditor(
+          focusNode: _focusNode,
+          autofocus: true,
           controller: cc,
           findController: fc,
           findBuilder: buildFindBar,
           style: CodeEditorStyle(
             fontSize: fontSize,
             fontFamily: 'JetBrains Mono',
+            fontFamilyFallback: const [
+              'Noto Sans CJK SC',
+              'WenQuanYi Micro Hei',
+              'Noto Sans',
+            ],
             fontHeight: 1.6,
             cursorColor: cs.primary,
             cursorLineColor: cs.primaryContainer.withValues(alpha: 0.3),

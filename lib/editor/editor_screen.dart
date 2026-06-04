@@ -3,10 +3,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:re_editor/re_editor.dart';
 import '../core/utils/file_io_stub.dart'
     if (dart.library.io) '../core/utils/file_io_native.dart';
-import 'editor_controller.dart';
 import 'widgets/source_code_editor.dart';
 import 'widgets/markdown_preview.dart';
 import 'widgets/toolbar.dart';
@@ -79,6 +77,10 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     // 监听自动保存设置变化
     ref.listen(autoSaveProvider, (_, next) => _setupAutoSaveTimer(next));
 
+    // 加载新文档时重置脏标记
+    ref.listen(currentDocumentIdProvider, (prev, next) {
+      if (prev != next) _isDirty = false;
+    });
     // 追踪未保存修改
     ref.listen(currentContentProvider, (prev, next) {
       if (prev != next) _isDirty = true;
@@ -167,7 +169,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     );
   }
 
-  void _saveDocument({bool promptFile = false}) {
+  Future<void> _saveDocument({bool promptFile = false}) async {
     final docId = ref.read(currentDocumentIdProvider);
     if (docId == null) return;
     final content = ref.read(currentContentProvider);
@@ -182,7 +184,6 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     box.put(docId, doc);
     _isDirty = false;
 
-    // 如果从本地文件打开，同时写回文件
     final filePath = ref.read(currentFilePathProvider);
     if (filePath != null) {
       try {
@@ -191,35 +192,39 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
         // 文件写入失败不阻断 Hive 保存
       }
     } else if (promptFile) {
-      // 提示用户选择保存位置
-      _saveAsFile();
+      await _saveAsFile();
     }
   }
 
   Future<void> _saveDocumentWithFilePrompt() async {
-    _saveDocument(promptFile: true);
+    await _saveDocument(promptFile: true);
   }
 
   Future<void> _saveAsFile() async {
     final content = ref.read(currentContentProvider);
     final title = ref.read(currentTitleProvider);
-    final fileName = title.isNotEmpty ? '$title.md' : '未命名文档.md';
+    final suggestedName = title.isNotEmpty ? '$title.md' : '未命名文档.md';
 
     try {
-      final path = await FilePicker.platform.saveFile(
+      String? path = await FilePicker.platform.saveFile(
         dialogTitle: '另存为 Markdown 文件',
-        fileName: fileName,
+        fileName: suggestedName,
         type: FileType.custom,
         allowedExtensions: ['md', 'markdown', 'txt'],
       );
       if (path == null) return; // 用户取消
+
+      final ext = RegExp(r'\.(md|markdown|txt)$');
+      if (!path.contains(ext)) {
+        path = '$path.md';
+      }
 
       writeStringToFile(path, content);
       ref.read(currentFilePathProvider.notifier).state = path;
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('已保存: $path')),
+        SnackBar(content: Text('已保存: ${path.split('/').last}')),
       );
     } catch (_) {
       if (!mounted) return;
@@ -513,9 +518,6 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
           FilledButton(
             onPressed: () {
               Navigator.pop(ctx);
-              final cc = ref.read(editorControllerProvider).codeController;
-              cc.text = content;
-              cc.selection = const CodeLineSelection.zero();
               ref.read(currentContentProvider.notifier).state = content;
               setState(() => _isDirty = true);
               ScaffoldMessenger.of(context).showSnackBar(
@@ -629,28 +631,33 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
   }
 
   Widget _buildStatusBar(BuildContext context) {
-    final content = ref.watch(currentContentProvider);
-    final lineCount = '\n'.allMatches(content).length + 1;
-    final charCount = content.length;
+    return Consumer(
+      builder: (context, ref, child) {
+        final content = ref.watch(currentContentProvider);
+        final lineCount = '\n'.allMatches(content).length + 1;
+        final charCount = content.length;
+        final preview = content.length > 30
+            ? '${content.substring(0, 30)}…'
+            : content;
 
-    return Container(
-      height: 24,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
-      ),
-      child: Row(
-        children: [
-          Text('$lineCount 行 · $charCount 字符',
-              style: const TextStyle(fontSize: 11)),
-          if (_isDirty)
-            const Text(' · 未保存',
-                style: TextStyle(fontSize: 11, color: Colors.orange)),
-          const Spacer(),
-          const Text('UTF-8 · Markdown', style: TextStyle(fontSize: 11)),
-        ],
-      ),
+        return Container(
+          height: 28,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHighest,
+            border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
+          ),
+          child: Row(
+            children: [
+              Text('$lineCount 行 · $charCount 字符 [$preview]',
+                  style: const TextStyle(fontSize: 10)),
+              if (_isDirty)
+                const Text(' · 未保存',
+                    style: TextStyle(fontSize: 10, color: Colors.orange)),
+            ],
+          ),
+        );
+      },
     );
   }
 }

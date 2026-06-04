@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -582,9 +583,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
     final box = ref.read(documentBoxProvider);
     await box.put(doc.id, doc);
-    ref.read(currentDocumentIdProvider.notifier).state = doc.id;
     ref.read(currentContentProvider.notifier).state = '';
     ref.read(currentTitleProvider.notifier).state = doc.title;
+    ref.read(currentFilePathProvider.notifier).state = null;
+    ref.read(currentDocumentIdProvider.notifier).state = doc.id;
     if (!mounted) return;
     Navigator.pushNamed(context, '/editor');
   }
@@ -599,10 +601,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       if (result == null || result.files.isEmpty) return;
       final file = result.files.first;
       final title = file.name;
-      // Web: 使用 bytes；桌面: 使用 path
       String content;
       if (file.bytes != null) {
-        content = String.fromCharCodes(file.bytes!);
+        content = utf8.decode(file.bytes!);
       } else if (file.path != null) {
         content = readFileAsString(file.path!);
       } else {
@@ -616,10 +617,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
       final box = ref.read(documentBoxProvider);
       await box.put(doc.id, doc);
-      ref.read(currentFilePathProvider.notifier).state = file.path;
-      ref.read(currentDocumentIdProvider.notifier).state = doc.id;
       ref.read(currentContentProvider.notifier).state = content;
       ref.read(currentTitleProvider.notifier).state = title;
+      ref.read(currentFilePathProvider.notifier).state = file.path;
+      ref.read(currentDocumentIdProvider.notifier).state = doc.id;
       if (!mounted) return;
       Navigator.pushNamed(context, '/editor');
     } catch (e) {
@@ -632,9 +633,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _openDocument(WidgetRef ref, BuildContext context, Document doc) {
-    ref.read(currentDocumentIdProvider.notifier).state = doc.id;
     ref.read(currentContentProvider.notifier).state = doc.content;
     ref.read(currentTitleProvider.notifier).state = doc.title;
+    ref.read(currentFilePathProvider.notifier).state = null;
+    ref.read(currentDocumentIdProvider.notifier).state = doc.id;
     Navigator.pushNamed(context, '/editor');
   }
 
