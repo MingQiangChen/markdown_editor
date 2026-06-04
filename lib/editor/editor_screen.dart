@@ -141,7 +141,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                 IconButton(
                   icon: const Icon(Icons.save),
                   tooltip: '保存 (Ctrl+S)',
-                  onPressed: _saveDocument,
+                  onPressed: _saveDocumentWithFilePrompt,
                 ),
               ],
             ),
@@ -167,29 +167,37 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
     );
   }
 
-  void _saveDocument() {
+  void _saveDocument({bool promptFile = false}) {
     final docId = ref.read(currentDocumentIdProvider);
     if (docId == null) return;
     final content = ref.read(currentContentProvider);
     final title = ref.read(currentTitleProvider);
     final box = ref.read(documentBoxProvider);
     final doc = box.get(docId);
-    if (doc != null) {
-      _createVersion(docId, doc.content);
-      doc.update(content);
-      doc.rename(title);
-      box.put(docId, doc);
-      _isDirty = false;
-      // 如果从本地文件打开，同时写回文件
-      final filePath = ref.read(currentFilePathProvider);
-      if (filePath != null) {
-        try {
-          writeStringToFile(filePath, content);
-        } catch (_) {
-          // 文件写入失败不阻断 Hive 保存
-        }
+    if (doc == null) return;
+
+    _createVersion(docId, doc.content);
+    doc.update(content);
+    doc.rename(title);
+    box.put(docId, doc);
+    _isDirty = false;
+
+    // 如果从本地文件打开，同时写回文件
+    final filePath = ref.read(currentFilePathProvider);
+    if (filePath != null) {
+      try {
+        writeStringToFile(filePath, content);
+      } catch (_) {
+        // 文件写入失败不阻断 Hive 保存
       }
+    } else if (promptFile) {
+      // 提示用户选择保存位置
+      _saveAsFile();
     }
+  }
+
+  Future<void> _saveDocumentWithFilePrompt() async {
+    _saveDocument(promptFile: true);
   }
 
   Future<void> _saveAsFile() async {

@@ -19,6 +19,22 @@ class SourceCodeEditor extends ConsumerStatefulWidget {
 }
 
 class _SourceCodeEditorState extends ConsumerState<SourceCodeEditor> {
+  bool _syncScheduled = false;
+
+  void _scheduleContentSync() {
+    if (_syncScheduled) return;
+    _syncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _syncScheduled = false;
+      if (!mounted) return;
+      final cc = ref.read(editorControllerProvider).codeController;
+      final content = ref.read(currentContentProvider);
+      if (cc.text != content) {
+        cc.text = content;
+      }
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final content = ref.watch(currentContentProvider);
@@ -28,14 +44,8 @@ class _SourceCodeEditorState extends ConsumerState<SourceCodeEditor> {
     final fontSize = ref.watch(editorFontSizeProvider);
     final cs = Theme.of(context).colorScheme;
 
-    // 同步外部变更到 code controller
     if (cc.text != content) {
-      final oldSelection = cc.selection;
-      cc.text = content;
-      // 尝试恢复选择位置
-      if (oldSelection.startOffset <= content.length) {
-        cc.selection = oldSelection;
-      }
+      _scheduleContentSync();
     }
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -78,9 +88,10 @@ class _SourceCodeEditorState extends ConsumerState<SourceCodeEditor> {
             textColor: cs.onSurface,
             codeTheme: highlightTheme,
           ),
-          onChanged: (v) =>
+          onChanged: (_) =>
               ref.read(currentContentProvider.notifier).state = cc.text,
-          indicatorBuilder: (ctx, editingController, chunkController, notifier) {
+          indicatorBuilder:
+              (ctx, editingController, chunkController, notifier) {
             return Row(
               children: [
                 DefaultCodeLineNumber(

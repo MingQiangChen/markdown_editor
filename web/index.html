@@ -31,6 +31,14 @@
 
   <title>markdown_editor</title>
   <link rel="manifest" href="manifest.json">
+
+  <script>
+    // 使用本地 CanvasKit 而非 Google CDN（gstatic.com 在国内无法访问）
+    _flutter = _flutter || {};
+    _flutter.loaderConfig = {
+      useLocalCanvasKit: true
+    };
+  </script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>
