@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -129,8 +130,13 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                 ),
                 IconButton(
                   icon: const Icon(Icons.ios_share),
-                  tooltip: '导出 HTML',
+                  tooltip: '导出',
                   onPressed: () => _showExportSheet(context),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.save_as),
+                  tooltip: '另存为 .md',
+                  onPressed: _saveAsFile,
                 ),
                 IconButton(
                   icon: const Icon(Icons.save),
@@ -183,6 +189,35 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
           // 文件写入失败不阻断 Hive 保存
         }
       }
+    }
+  }
+
+  Future<void> _saveAsFile() async {
+    final content = ref.read(currentContentProvider);
+    final title = ref.read(currentTitleProvider);
+    final fileName = title.isNotEmpty ? '$title.md' : '未命名文档.md';
+
+    try {
+      final path = await FilePicker.platform.saveFile(
+        dialogTitle: '另存为 Markdown 文件',
+        fileName: fileName,
+        type: FileType.custom,
+        allowedExtensions: ['md', 'markdown', 'txt'],
+      );
+      if (path == null) return; // 用户取消
+
+      writeStringToFile(path, content);
+      ref.read(currentFilePathProvider.notifier).state = path;
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('已保存: $path')),
+      );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('保存文件失败')),
+      );
     }
   }
 
