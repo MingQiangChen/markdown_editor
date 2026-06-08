@@ -8,6 +8,8 @@ import '../core/utils/file_io_stub.dart'
 import 'widgets/source_code_editor.dart';
 import 'widgets/markdown_preview.dart';
 import 'widgets/toolbar.dart';
+import 'widgets/outline_panel.dart';
+import 'widgets/editor_tab_bar.dart';
 import '../core/constants/app_constants.dart';
 import '../core/utils/download_stub.dart'
     if (dart.library.html) '../core/utils/download_web.dart';
@@ -23,6 +25,9 @@ class _RedoIntent extends Intent {}
 class _BoldIntent extends Intent {}
 class _ItalicIntent extends Intent {}
 class _LinkIntent extends Intent {}
+class _NextTabIntent extends Intent {}
+class _PrevTabIntent extends Intent {}
+class _CloseTabIntent extends Intent {}
 
 // ─── EditorScreen ───────────────────────────────────────────
 
@@ -38,6 +43,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
   Timer? _autoSaveTimer;
   bool _isDirty = false;
   bool _mobileShowPreview = false;
+  bool _showOutline = false;
 
   @override
   void dispose() {
@@ -100,6 +106,13 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
             _ItalicIntent(),
         LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyK):
             _LinkIntent(),
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.tab):
+            _NextTabIntent(),
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.shift,
+                LogicalKeyboardKey.tab):
+            _PrevTabIntent(),
+        LogicalKeySet(LogicalKeyboardKey.control, LogicalKeyboardKey.keyW):
+            _CloseTabIntent(),
       },
       child: Actions(
         actions: <Type, Action<Intent>>{
@@ -115,6 +128,12 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
               onInvoke: (_) => controller.wrapSelection('*', '*')),
           _LinkIntent: CallbackAction<_LinkIntent>(
               onInvoke: (_) => controller.wrapSelection('[', '](url)')),
+          _NextTabIntent:
+              CallbackAction<_NextTabIntent>(onInvoke: (_) => _nextTab()),
+          _PrevTabIntent:
+              CallbackAction<_PrevTabIntent>(onInvoke: (_) => _prevTab()),
+          _CloseTabIntent:
+              CallbackAction<_CloseTabIntent>(onInvoke: (_) => _closeCurrentTab()),
         },
         child: PopScope(
           canPop: _canPop,
@@ -145,6 +164,12 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                   tooltip: '保存 (Ctrl+S)',
                   onPressed: _saveDocumentWithFilePrompt,
                 ),
+                IconButton(
+                  icon: const Icon(Icons.list_alt),
+                  tooltip: '文档大纲',
+                  isSelected: _showOutline,
+                  onPressed: () => setState(() => _showOutline = !_showOutline),
+                ),
               ],
             ),
             body: Builder(builder: (context) {
@@ -155,6 +180,11 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                   : editorMode;
               return Column(
                 children: [
+                  EditorTabBar(
+                    onAllTabsClosed: () {
+                      if (mounted) Navigator.of(context).pop();
+                    },
+                  ),
                   const EditorToolbar(),
                   Expanded(
                       child: _buildEditorLayout(context, effectiveMode)),
@@ -609,55 +639,157 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
   Widget _buildEditorLayout(BuildContext context, EditorMode mode) {
     final width = MediaQuery.of(context).size.width;
     final compact = width < AppConstants.compactWidthBreakpoint;
+    final content = ref.watch(currentContentProvider);
+    final controller = ref.watch(editorControllerProvider);
+    final activeLine = controller.codeController.selection.startIndex;
+
+    final outlinePanel = _showOutline
+        ? SizedBox(
+            width: 200,
+            child: OutlinePanel(
+              content: content,
+              activeLine: activeLine,
+              onHeadingTap: _navigateToLine,
+            ),
+          )
+        : null;
+
     if (compact) {
       return _mobileShowPreview
           ? const MarkdownPreview()
           : const SourceCodeEditor();
     }
+
+    List<Widget> children;
     switch (mode) {
       case EditorMode.editOnly:
-        return const SourceCodeEditor();
+        children = [const Expanded(child: SourceCodeEditor())];
       case EditorMode.previewOnly:
-        return const MarkdownPreview();
+        children = [const Expanded(child: MarkdownPreview())];
       case EditorMode.split:
-        return Row(
-          children: [
-            const Expanded(child: SourceCodeEditor()),
-            Container(width: 1, color: Theme.of(context).dividerColor),
-            const Expanded(child: MarkdownPreview()),
-          ],
-        );
+        children = [
+          const Expanded(child: SourceCodeEditor()),
+          Container(width: 1, color: Theme.of(context).dividerColor),
+          const Expanded(child: MarkdownPreview()),
+        ];
+    }
+
+    if (outlinePanel != null) {
+      children.add(Container(width: 1, color: Theme.of(context).dividerColor));
+      children.add(outlinePanel);
+    }
+
+    return Row(children: children);
+  }
+
+  void _navigateToLine(int lineIndex) {
+    final controller = ref.read(editorControllerProvider);
+    final totalLines = controller.codeController.codeLines.length;
+    final targetLine = lineIndex.clamp(0, totalLines - 1);
+    controller.codeController.selection = CodeLineSelection.fromPosition(
+      position: CodeLinePosition(index: targetLine, offset: 0),
+    );
+  }
+
+  void _nextTab() {
+    final tabs = ref.read(openTabsProvider);
+    final currentId = ref.read(currentDocumentIdProvider);
+    if (tabs.length < 2) return;
+    final idx = tabs.indexOf(currentId ?? '');
+    final nextIdx = (idx + 1) % tabs.length;
+    _switchToTab(tabs[nextIdx]);
+  }
+
+  void _prevTab() {
+    final tabs = ref.read(openTabsProvider);
+    final currentId = ref.read(currentDocumentIdProvider);
+    if (tabs.length < 2) return;
+    final idx = tabs.indexOf(currentId ?? '');
+    final prevIdx = (idx - 1 + tabs.length) % tabs.length;
+    _switchToTab(tabs[prevIdx]);
+  }
+
+  void _closeCurrentTab() {
+    final tabs = ref.read(openTabsProvider);
+    final currentId = ref.read(currentDocumentIdProvider);
+    if (currentId == null || tabs.isEmpty) return;
+
+    final idx = tabs.indexOf(currentId);
+    if (idx == -1) return;
+
+    // Save current content
+    final content = ref.read(currentContentProvider);
+    final box = ref.read(documentBoxProvider);
+    final doc = box.get(currentId);
+    if (doc != null && doc.content != content) {
+      doc.update(content);
+      box.put(currentId, doc);
+    }
+
+    final newTabs = tabs.toList()..removeAt(idx);
+    ref.read(openTabsProvider.notifier).state = newTabs;
+
+    if (newTabs.isEmpty) {
+      if (mounted) Navigator.of(context).pop();
+    } else {
+      final nextIdx = idx.clamp(0, newTabs.length - 1);
+      _switchToTab(newTabs[nextIdx]);
+    }
+  }
+
+  void _switchToTab(String docId) {
+    final currentId = ref.read(currentDocumentIdProvider);
+    if (currentId == docId) return;
+
+    if (currentId != null) {
+      final content = ref.read(currentContentProvider);
+      final box = ref.read(documentBoxProvider);
+      final doc = box.get(currentId);
+      if (doc != null && doc.content != content) {
+        doc.update(content);
+        box.put(currentId, doc);
+      }
+    }
+
+    final box = ref.read(documentBoxProvider);
+    final doc = box.get(docId);
+    if (doc != null) {
+      ref.read(currentDocumentIdProvider.notifier).state = docId;
+      ref.read(currentContentProvider.notifier).state = doc.content;
+      ref.read(currentTitleProvider.notifier).state = doc.title;
     }
   }
 
   Widget _buildStatusBar(BuildContext context) {
-    return Consumer(
-      builder: (context, ref, child) {
-        final content = ref.watch(currentContentProvider);
-        final lineCount = '\n'.allMatches(content).length + 1;
-        final charCount = content.length;
-        final preview = content.length > 30
-            ? '${content.substring(0, 30)}…'
-            : content;
+    final content = ref.watch(currentContentProvider);
+    final lineCount = '\n'.allMatches(content).length + 1;
+    final charCount = content.length;
+    final wordCount = content.isEmpty
+        ? 0
+        : content.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
+    final readingMinutes = wordCount == 0 ? 0 : (wordCount / 200).ceil().clamp(1, 999);
 
-        return Container(
-          height: 28,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHighest,
-            border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
-          ),
-          child: Row(
-            children: [
-              Text('$lineCount 行 · $charCount 字符 [$preview]',
-                  style: const TextStyle(fontSize: 10)),
-              if (_isDirty)
-                const Text(' · 未保存',
-                    style: TextStyle(fontSize: 10, color: Colors.orange)),
-            ],
-          ),
-        );
-      },
+    return Container(
+      height: 24,
+      padding: const EdgeInsets.symmetric(horizontal: 12),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        border: Border(top: BorderSide(color: Theme.of(context).dividerColor)),
+      ),
+      child: Row(
+        children: [
+          Text('$lineCount 行 · $wordCount 词 · $charCount 字符',
+              style: const TextStyle(fontSize: 11)),
+          if (readingMinutes > 0)
+            Text(' · 约 $readingMinutes 分钟',
+                style: const TextStyle(fontSize: 11)),
+          if (_isDirty)
+            const Text(' · 未保存',
+                style: TextStyle(fontSize: 11, color: Colors.orange)),
+          const Spacer(),
+          const Text('UTF-8 · Markdown', style: TextStyle(fontSize: 11)),
+        ],
+      ),
     );
   }
 }

@@ -23,22 +23,10 @@
 | 项 | 详情 |
 |----|------|
 | 描述 | 支持多行 Markdown 文本输入，中文输入法兼容 |
-| 技术方案 | `TextField(maxLines: null, expands: true)` + `TextEditingController` |
-| 验收标准 | 输入延迟 <16ms；支持 IME 组合输入；10MB 文件滚动不卡顿 |
-| 依赖 | `flutter` SDK |
-| 风险 | **大文件性能** — 10MB+ 纯文本时 TextField 无虚拟滚动会严重卡顿 |
-| 应对 | P0 先约束 <1MB，P2 阶段替换为 `re_editor` (有虚拟滚动) 或自研 canvas 渲染 |
-
-**技术备注**：
-
-```dart
-// 当前方案：TextField (简单，适合 MVP)
-// 缺点：无虚拟滚动、无语法高亮、无行号
-// 升级路径：re_editor.CodeEditor (支持虚拟滚动 + 语法高亮 + 行号)
-
-// 升级时机：文件大小超过 500KB 时考虑切换
-// 切换成本：1-2 天（接口兼容层已设计好）
-```
+| 技术方案 | `re_editor.CodeEditor` + `CodeLineEditingController` |
+| 验收标准 | 输入延迟 <16ms；支持 IME 组合输入；支持虚拟滚动 |
+| 依赖 | `re_editor: ^0.9.0`, `re_highlight: ^0.0.3` |
+| 状态 | ✅ 已完成 (已从 TextField 迁移至 re_editor) |
 
 ### P0-2 实时预览
 
@@ -58,9 +46,9 @@
 - [x] 行内代码 / 代码块 (围栏)
 - [x] 分割线
 - [x] 表格
-- [ ] 任务列表 (P1)
+- [x] 任务列表 ✓
 - [ ] 脚注 (P2)
-- [ ] 数学公式 (P2)
+- [x] 数学公式 ✓
 
 ### P0-3 工具栏
 
@@ -170,21 +158,26 @@ Document {
 
 ## 四、P2 功能清单（1.0 之后）
 
-| 编号 | 功能 | 备注 |
-|------|------|------|
-| P2-1 | 云端同步 (WebSocket) | 需自建后端，复杂度高 |
-| P2-2 | 多人协作编辑 | OT/CRDT 算法 |
-| P2-3 | 文件夹管理 | 树状结构 + 拖拽排序 |
-| P2-4 | 标签系统 | 文档加标签 + 标签筛选 |
-| P2-5 | 搜索全文 | 全文索引 + 模糊匹配 |
-| P2-6 | 图片上传 (图床) | 集成阿里云 OSS / S3 |
-| P2-7 | 数学公式 (KaTeX) | `flutter_math_fork` |
-| P2-8 | Mermaid 流程图 | `flutter_mermaid` |
-| P2-9 | 版本历史 + Diff | 存储版本快照，对比差异 |
-| P2-10 | 插件系统 | 参考 Obsidian 插件架构 |
-| P2-11 | 移动端触控优化 | 双指缩放预览、长按菜单、浮动工具栏 |
-| P2-12 | 文件关联 (.md 默认打开) | 各平台注册文件类型 |
-| P2-13 | 应用市场分发 | Google Play / App Store / 华为应用市场 |
+| 编号 | 功能 | 状态 | 备注 |
+|------|------|------|------|
+| P2-1 | 云端同步 (WebSocket) | 待定 | 需自建后端，复杂度高 |
+| P2-2 | 多人协作编辑 | 待定 | OT/CRDT 算法 |
+| P2-3 | 文件夹管理 | ✅ | 卡片展示 + 长按菜单 |
+| P2-4 | 标签系统 | ✅ | FilterChip 筛选 + 管理面板 |
+| P2-5 | 全文搜索增强 | 待定 | 全文索引 + 模糊匹配 |
+| P2-6 | 代码块语法高亮预览 | ✅ | re_highlight TextSpanRenderer |
+| P2-7 | 数学公式 (LaTeX) | ✅ | flutter_math_fork |
+| P2-8 | Mermaid 流程图 | ✅ | flutter_mermaid |
+| P2-9 | 版本历史 + Diff | ✅ | 自动快照 + 恢复 |
+| P2-10 | 多标签页编辑 | ✅ | EditorTabBar + Ctrl+Tab |
+| P2-11 | 文档大纲面板 | ✅ | 层级标题 + 点击跳转 |
+| P2-12 | 文件管理器 | ✅ | 排序/导入/批量操作 |
+| P2-13 | GFM 任务列表 | ✅ | checkboxBuilder |
+| P2-14 | 字数统计 & 阅读时间 | ✅ | 状态栏实时显示 |
+| P2-15 | 图片上传 (图床) | 待定 | 集成 OSS / S3 |
+| P2-16 | 插件系统 | 待定 | 参考 Obsidian 插件架构 |
+| P2-17 | 文件关联 (.md 默认打开) | 待定 | 各平台注册文件类型 |
+| P2-18 | 应用市场分发 | 待定 | Google Play / App Store |
 
 ---
 
@@ -219,9 +212,12 @@ markdown_editor/
 │   │   ├── editor_screen.dart      # 编辑器页面 (路由: /editor)
 │   │   ├── editor_controller.dart  # 编辑器控制器 (文本操作)
 │   │   └── widgets/
-│   │       ├── source_code_editor.dart  # 编辑区 (TextField)
-│   │       ├── markdown_preview.dart    # 预览区 (flutter_markdown)
-│   │       └── toolbar.dart             # 工具栏 (格式化按钮)
+│   │       ├── source_code_editor.dart  # 编辑区 (re_editor.CodeEditor)
+│   │       ├── markdown_preview.dart    # 预览区 (代码高亮+LaTeX+Mermaid)
+│   │       ├── toolbar.dart             # 工具栏 (16 个按钮)
+│   │       ├── find_replace_bar.dart    # 查找/替换栏
+│   │       ├── outline_panel.dart       # 文档大纲面板
+│   │       └── editor_tab_bar.dart      # 多标签页栏
 │   │
 │   ├── storage/                  # 存储模块
 │   │   └── local_storage.dart      # 本地存储服务 (Hive + 文件)

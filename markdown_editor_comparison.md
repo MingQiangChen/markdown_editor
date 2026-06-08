@@ -1,4 +1,8 @@
-# Markdown编辑器技术选型对比
+# Markdown 编辑器技术选型对比 (历史档案)
+
+> ⚠️ 此文档为项目早期 (2024) 的技术选型对比，当时评估的是 Web 前端方案。
+> 最终选择 **Flutter** 作为跨平台框架，`re_editor` 作为编辑器核心。
+> 当前技术架构详见 `TECHNICAL_ARCHITECTURE.md`。
 
 ## 1. CodeMirror 6
 

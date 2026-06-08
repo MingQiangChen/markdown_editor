@@ -93,6 +93,9 @@ final editorControllerProvider = Provider<EditorController>((ref) {
   return controller;
 });
 
+/// 编辑器标签页 - 已打开的文档 ID 列表
+final openTabsProvider = StateProvider<List<String>>((ref) => []);
+
 // ─── 设置持久化 ───────────────────────────────────────────
 
 /// 从 Hive 加载所有持久化设置

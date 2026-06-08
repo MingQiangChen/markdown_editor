@@ -1,4 +1,5 @@
 import 'dart:convert';
+
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -575,6 +576,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   // ─── 文档操作 ─────────────────────────────────────────
 
+  void _addToTabs(String docId) {
+    final tabs = ref.read(openTabsProvider);
+    if (!tabs.contains(docId)) {
+      ref.read(openTabsProvider.notifier).state = [...tabs, docId];
+    }
+  }
+
   void _createDocument(WidgetRef ref) async {
     final doc = Document(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -583,6 +591,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
     final box = ref.read(documentBoxProvider);
     await box.put(doc.id, doc);
+    _addToTabs(doc.id);
     ref.read(currentContentProvider.notifier).state = '';
     ref.read(currentTitleProvider.notifier).state = doc.title;
     ref.read(currentFilePathProvider.notifier).state = null;
@@ -602,10 +611,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       final file = result.files.first;
       final title = file.name;
       String content;
-      if (file.bytes != null) {
-        content = utf8.decode(file.bytes!);
-      } else if (file.path != null) {
+      if (file.path != null) {
         content = readFileAsString(file.path!);
+      } else if (file.bytes != null) {
+        content = utf8.decode(file.bytes!);
       } else {
         return;
       }
@@ -617,6 +626,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       );
       final box = ref.read(documentBoxProvider);
       await box.put(doc.id, doc);
+      _addToTabs(doc.id);
       ref.read(currentContentProvider.notifier).state = content;
       ref.read(currentTitleProvider.notifier).state = title;
       ref.read(currentFilePathProvider.notifier).state = file.path;
@@ -633,6 +643,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _openDocument(WidgetRef ref, BuildContext context, Document doc) {
+    _addToTabs(doc.id);
     ref.read(currentContentProvider.notifier).state = doc.content;
     ref.read(currentTitleProvider.notifier).state = doc.title;
     ref.read(currentFilePathProvider.notifier).state = null;
@@ -1027,6 +1038,10 @@ class _DocumentSearch extends SearchDelegate<String> {
           onTap: () {
             close(context, doc.id);
             if (!doc.isFolder) {
+              final tabs = ref.read(openTabsProvider);
+              if (!tabs.contains(doc.id)) {
+                ref.read(openTabsProvider.notifier).state = [...tabs, doc.id];
+              }
               ref.read(currentDocumentIdProvider.notifier).state = doc.id;
               ref.read(currentContentProvider.notifier).state = doc.content;
               ref.read(currentTitleProvider.notifier).state = doc.title;

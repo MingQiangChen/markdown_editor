@@ -25,18 +25,20 @@ lib/
 │   └── providers/               # Riverpod Provider 定义 (全局状态)
 │
 ├── editor/                      # 编辑器模块 (核心)
-│   ├── editor_screen.dart       # 编辑器页面：Shortcuts/Actions/PopScope/Scaffold
+│   ├── editor_screen.dart       # 编辑器页面：标签栏/工具栏/布局/快捷键/大纲/状态栏
 │   ├── editor_controller.dart   # 文本操作控制器 (insert/wrap/undo/redo)
 │   └── widgets/
-│       ├── source_code_editor.dart  # 代码编辑区 (re_editor.CodeEditor)
-│       ├── markdown_preview.dart    # 预览区 (Markdown + LaTeX + Mermaid + 行内数学)
-│       ├── toolbar.dart             # 格式化工具栏
-│       └── find_replace_bar.dart    # 查找/替换栏
+│       ├── source_code_editor.dart  # 代码编辑区 (re_editor.CodeEditor + 语法高亮)
+│       ├── markdown_preview.dart    # 预览区 (Markdown + 代码高亮 + LaTeX + Mermaid + 行内数学 + 任务列表)
+│       ├── toolbar.dart             # 格式化工具栏 (16 个按钮)
+│       ├── find_replace_bar.dart    # 查找/替换栏
+│       ├── outline_panel.dart       # 文档大纲面板 (标题层级 + 点击跳转)
+│       └── editor_tab_bar.dart      # 多标签页栏 (切换/关闭/右键菜单/中键关闭)
 │
 ├── features/                    # 功能页面
-│   ├── home/                    # 首页（文档列表 + 文件夹 + 标签筛选）
-│   ├── settings/                # 设置页面
-│   └── file_manager/            # 文件管理 (预留)
+│   ├── home/                    # 首页（文档列表 + 文件夹 + 标签筛选 + 搜索）
+│   ├── settings/                # 设置页面 (主题/编辑器/快捷键/数据管理)
+│   └── file_manager/            # 文件管理 (排序/导入/批量操作/导出)
 │
 └── storage/                     # 存储模块
     └── local_storage.dart       # Hive 存储服务封装
@@ -47,76 +49,75 @@ lib/
 ## 数据流架构
 
 ```
-用户输入 CodeEditor
-      │ onChanged
+用户输入 / 工具栏操作
+      │
       ▼
-currentContentProvider (Riverpod StateProvider<String>)
+CodeLineEditingController.text 更新
+      │
+      ├── onChanged 回调 → currentContentProvider 更新
       │
       ├──→ SourceCodeEditor (编辑区回显)
       │     └── 外部同步: if (cc.text != content) cc.text = content
       │
       ├──→ MarkdownPreview (flutter_markdown 渲染)
-      │     └── 扩展: _CodeBlockBuilder (math/mermaid), InlineMathSyntax ($...$), InteractiveViewer
+      │     └── _CodeBlockBuilder 分派:
+      │         - math/latex → flutter_math_fork
+      │         - mermaid → flutter_mermaid
+      │         - 其他语言 → re_highlight TextSpanRenderer (语法高亮)
+      │     └── InlineMathSyntax ($...$) → flutter_math_fork
+      │     └── checkboxBuilder → GFM 任务列表图标
+      │     └── InteractiveViewer (缩放 0.5x-3.0x)
       │
-      ├──→ StatusBar (行数/字数统计)
+      ├──→ OutlinePanel (标题解析 + 层级渲染)
+      │     └── 点击 → EditorController.selection → 编辑器滚动
       │
-      └──→ EditorController (工具栏操作)
-                │
-                ├── insertAtCursor(text)
-                ├── wrapSelection(prefix, suffix)
-                ├── insertBlockPrefix(prefix)
-                ├── undo() / redo() → codeController.undo()/redo()
-                │
-                └──→ codeController.text 更新
-                          │
-                          ▼
-                   onChanged 回调触发
-                          │
-                          ▼
-              currentContentProvider 更新 → 所有监听者 rebuild
+      ├──→ StatusBar (行数/词数/字符数/阅读时间)
+      │
+      └──→ EditorTabBar (标签切换)
+            └── _switchTab: 保存当前 → 切换 currentDocumentId → 新 EditorController 创建
 ```
 
 **关键设计原则**:
 1. **单一数据源**: `currentContentProvider` 是编辑内容的唯一权威来源
-2. **双向同步**: CodeEditor ↔ Provider 之间通过 `cc.text != content` 检测和 `onChanged` 回调保持同步
-3. **Controller 模式**: 所有文本修改通过 `EditorController` 统一处理，保证光标位置正确
+2. **Controller 生命周期**: `editorControllerProvider` 使用 `autoDispose` + `ref.watch(currentDocumentIdProvider)` 实现文档切换时自动重建
+3. **双向同步**: CodeEditor ↔ Provider 通过 `cc.text != content` 检测和 `onChanged` 回调保持同步
+4. **标签隔离**: 切换标签时保存当前内容到 Hive，新标签的 EditorController 从 Hive 读取内容初始化
 
 ---
 
 ## Provider 依赖图
 
 ```
-documentBoxProvider ────→ documentListProvider
+documentBoxProvider ────→ documentListProvider / allDocumentsProvider
 settingsBoxProvider ────→ loadSettings()
 versionBoxProvider ─────→ _createVersion()
 
 editorModeProvider ─────→ EditorScreen._buildEditorLayout()
-showPreviewProvider ────→ (P2: 废弃，改用 editorMode)
 editorFontSizeProvider ─→ SourceCodeEditor
 autoSaveProvider ───────→ EditorScreen._setupAutoSaveTimer()
 themeModeProvider ──────→ MaterialApp.themeMode
 
-currentDocumentIdProvider ─→ _saveDocument() / _openDocument()
-currentContentProvider ────→ 编辑区 + 预览区 + 状态栏
-currentTitleProvider ──────→ AppBar.title
+currentDocumentIdProvider ─→ editorControllerProvider (watched for autoDispose)
+                           ─→ _saveDocument() / EditorTabBar
+currentContentProvider ────→ 编辑区 + 预览区 + 状态栏 + 大纲面板
+currentTitleProvider ──────→ AppBar.title + EditorTabBar
+openTabsProvider ──────────→ EditorTabBar + _addToTabs / _closeTab
+
+fileSortFieldProvider ─────→ allDocumentsProvider (排序)
+fileSortAscendingProvider ─→ allDocumentsProvider
 ```
 
 ---
 
 ## 关键设计决策
 
-### 1. 编辑器选择: TextField → re_editor
+### 1. 编辑器: re_editor + 自定义 Controller
 
-| 阶段 | 方案 | 原因 |
-|------|------|------|
-| P0 | `TextField` | 快速原型，简单够用 |
-| P1 | `re_editor.CodeEditor` | 行号、语法高亮、虚拟滚动、撤销重做 |
-
-迁移要点:
-- `TextEditingController` → `CodeLineEditingController`
-- 光标操作: 平铺索引 → `CodeLinePosition(index, offset)`
-- 选区操作: `CodeLineSelection(baseIndex, baseOffset, extentIndex, extentOffset)`
-- 行号: `DefaultCodeLineNumber` widget
+- `CodeLineEditingController`: 文本编辑、选区管理、行号
+- `CodeFindController`: 查找/替换
+- `CodeHighlightTheme`: re_highlight 语法定义 + 主题
+- `EditorController`: 自定义封装，提供 insertAtCursor / wrapSelection / insertBlockPrefix / undo / redo
+- Provider 使用 `autoDispose` + `ref.watch(currentDocumentIdProvider)` 实现文档切换时自动重建
 
 ### 2. 持久化: Hive
 
