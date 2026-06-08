@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:re_editor/re_editor.dart';
 import '../core/utils/file_io_stub.dart'
     if (dart.library.io) '../core/utils/file_io_native.dart';
 import 'widgets/source_code_editor.dart';
@@ -354,6 +355,7 @@ class _EditorScreenState extends ConsumerState<EditorScreen> {
                     Navigator.pop(ctx);
                     Printing.layoutPdf(
                       onLayout: (format) =>
+                          // ignore: deprecated_member_use
                           Printing.convertHtml(format: format, html: html),
                       name: title,
                     );

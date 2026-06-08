@@ -21,7 +21,7 @@ class SettingsScreen extends ConsumerWidget {
       body: ListView(
         children: [
           // ─── 外观 ─────────────────────────────
-          _SectionHeader(title: '外观'),
+          const _SectionHeader(title: '外观'),
           _settingTile(
             icon: Icons.palette,
             title: '主题',
@@ -46,7 +46,7 @@ class SettingsScreen extends ConsumerWidget {
           ),
 
           // ─── 编辑器 ───────────────────────────
-          _SectionHeader(title: '编辑器'),
+          const _SectionHeader(title: '编辑器'),
           SwitchListTile(
             secondary: const Icon(Icons.preview),
             title: const Text('显示预览'),
@@ -108,7 +108,7 @@ class SettingsScreen extends ConsumerWidget {
           ),
 
           // ─── 快捷键参考 ──────────────────────
-          _SectionHeader(title: '快捷键'),
+          const _SectionHeader(title: '快捷键'),
           ListTile(
             leading: const Icon(Icons.keyboard),
             title: const Text('查看快捷键'),
@@ -117,10 +117,10 @@ class SettingsScreen extends ConsumerWidget {
           ),
 
           // ─── 数据 ─────────────────────────────
-          _SectionHeader(title: '数据'),
-          ListTile(
-            leading: const Icon(Icons.storage),
-            title: const Text('存储信息'),
+          const _SectionHeader(title: '数据'),
+          const ListTile(
+            leading: Icon(Icons.storage),
+            title: Text('存储信息'),
             subtitle: Text('本地 Hive 数据库 (浏览器 IndexedDB)'),
           ),
           ListTile(
@@ -132,16 +132,16 @@ class SettingsScreen extends ConsumerWidget {
           ),
 
           // ─── 关于 ─────────────────────────────
-          _SectionHeader(title: '关于'),
-          ListTile(
-            leading: const Icon(Icons.info),
-            title: const Text('版本'),
-            subtitle: const Text(AppConstants.appVersion),
+          const _SectionHeader(title: '关于'),
+          const ListTile(
+            leading: Icon(Icons.info),
+            title: Text('版本'),
+            subtitle: Text(AppConstants.appVersion),
           ),
-          ListTile(
-            leading: const Icon(Icons.code),
-            title: const Text('技术栈'),
-            subtitle: const Text('Flutter • Riverpod • Hive'),
+          const ListTile(
+            leading: Icon(Icons.code),
+            title: Text('技术栈'),
+            subtitle: Text('Flutter • Riverpod • Hive'),
           ),
           const ListTile(
             leading: Icon(Icons.check_circle_outline),
