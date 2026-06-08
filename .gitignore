@@ -28,3 +28,4 @@ Thumbs.db
 .claude/
 .consolidate-state.json
 *.docx
+markdown_editor_app/
